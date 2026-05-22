@@ -1,16 +1,19 @@
 import type { User } from '../types'
 
-// Parse a plain text list: one username per line, or "username - displayName"
-export function parseUserList(raw: string): User[] {
-  return raw
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [username, ...rest] = line.split(/\s*[-–]\s*/)
-      return {
-        username: username.replace('@', '').trim(),
-        displayName: rest.join(' ').trim() || username.trim(),
-      }
-    })
+export function parseInstagramHtml(html: string): User[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const links = Array.from(doc.querySelectorAll<HTMLAnchorElement>('a[href*="instagram.com/"]'))
+  const seen = new Set<string>()
+  const users: User[] = []
+
+  for (const link of links) {
+    const match = (link.getAttribute('href') || '').match(/instagram\.com\/([^/?#]+)/)
+    if (!match) continue
+    const username = match[1]
+    if (!username || seen.has(username)) continue
+    seen.add(username)
+    users.push({ username, displayName: link.textContent?.trim() || username })
+  }
+
+  return users
 }

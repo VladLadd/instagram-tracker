@@ -1,19 +1,45 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { parseUserList } from '../composables/useParser'
+import type { User } from '../types'
+import { parseInstagramHtml } from '../composables/useParser'
 import { api } from '../composables/useApi'
 
 const emit = defineEmits<{ (e: 'created'): void; (e: 'close'): void }>()
 
 const label = ref('')
-const followersRaw = ref('')
-const followingRaw = ref('')
+const followers = ref<User[]>([])
+const following = ref<User[]>([])
+const followersName = ref('')
+const followingName = ref('')
 const loading = ref(false)
 const error = ref('')
 
+function readFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл'))
+    reader.readAsText(file, 'utf-8')
+  })
+}
+
+async function onFollowersFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  followersName.value = file.name
+  followers.value = parseInstagramHtml(await readFile(file))
+}
+
+async function onFollowingFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  followingName.value = file.name
+  following.value = parseInstagramHtml(await readFile(file))
+}
+
 async function submit() {
-  if (!followersRaw.value.trim() && !followingRaw.value.trim()) {
-    error.value = 'Добавь хотя бы один список'
+  if (!followers.value.length && !following.value.length) {
+    error.value = 'Загрузи хотя бы один файл'
     return
   }
   loading.value = true
@@ -21,8 +47,8 @@ async function submit() {
   try {
     await api.createSnapshot({
       label: label.value.trim(),
-      followers: parseUserList(followersRaw.value),
-      following: parseUserList(followingRaw.value),
+      followers: followers.value,
+      following: following.value,
     })
     emit('created')
   } catch (e: unknown) {
@@ -41,8 +67,8 @@ async function submit() {
         <button class="close-btn" @click="emit('close')">×</button>
       </div>
       <p class="modal-hint">
-        Вставь списки username'ов — каждый с новой строки.<br />
-        Формат: <code>username</code> или <code>username - Имя</code>
+        Загрузи HTML-файлы из архива данных Instagram<br />
+        (<code>followers_1.html</code> и <code>following.html</code>)
       </p>
 
       <div class="field">
@@ -51,16 +77,33 @@ async function submit() {
       </div>
 
       <div class="two-col">
-        <div class="field">
-          <label>Подписчики (Followers)</label>
-          <textarea v-model="followersRaw" placeholder="username1&#10;username2 - Имя&#10;..." rows="10" />
-          <span class="count">{{ parseUserList(followersRaw).length }} пользователей</span>
-        </div>
-        <div class="field">
-          <label>Подписки (Following)</label>
-          <textarea v-model="followingRaw" placeholder="username1&#10;username2 - Имя&#10;..." rows="10" />
-          <span class="count">{{ parseUserList(followingRaw).length }} пользователей</span>
-        </div>
+        <label class="file-drop" :class="{ loaded: followers.length > 0 }">
+          <input type="file" accept=".html" @change="onFollowersFile" />
+          <span v-if="!followers.length" class="file-drop-idle">
+            <span class="file-icon">↑</span>
+            <span class="file-label">Подписчики</span>
+            <span class="file-hint">followers_1.html</span>
+          </span>
+          <span v-else class="file-drop-done">
+            <span class="file-icon">✓</span>
+            <span class="file-label">{{ followersName }}</span>
+            <span class="file-count">{{ followers.length }} пользователей</span>
+          </span>
+        </label>
+
+        <label class="file-drop" :class="{ loaded: following.length > 0 }">
+          <input type="file" accept=".html" @change="onFollowingFile" />
+          <span v-if="!following.length" class="file-drop-idle">
+            <span class="file-icon">↑</span>
+            <span class="file-label">Подписки</span>
+            <span class="file-hint">following.html</span>
+          </span>
+          <span v-else class="file-drop-done">
+            <span class="file-icon">✓</span>
+            <span class="file-label">{{ followingName }}</span>
+            <span class="file-count">{{ following.length }} пользователей</span>
+          </span>
+        </label>
       </div>
 
       <p v-if="error" class="error-msg">{{ error }}</p>
